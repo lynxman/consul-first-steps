@@ -5,43 +5,73 @@
 #
 class consul::params {
 
-  $install_method    = 'url'
-  $package_name      = 'consul'
-  $package_ensure    = 'latest'
-  $ui_package_name   = 'consul_ui'
-  $ui_package_ensure = 'latest'
-  $version = '0.4.1'
+  $install_method        = 'url'
+  $package_name          = 'consul'
+  $package_ensure        = 'latest'
+  $download_url_base     = 'https://releases.hashicorp.com/consul/'
+  $download_extension    = 'zip'
+  $ui_package_name       = 'consul_ui'
+  $ui_package_ensure     = 'latest'
+  $ui_download_url_base  = 'https://releases.hashicorp.com/consul/'
+  $ui_download_extension = 'zip'
+  $version               = '0.5.2'
+  $config_mode           = '0660'
 
   case $::architecture {
     'x86_64', 'amd64': { $arch = 'amd64' }
     'i386':            { $arch = '386'   }
-    default:           { fail("Unsupported kernel architecture: ${::architecture}") }
+    /^arm.*/:          { $arch = 'arm'   }
+    default:           {
+      fail("Unsupported kernel architecture: ${::architecture}")
+    }
   }
 
   $os = downcase($::kernel)
 
-  $init_style = $::operatingsystem ? {
-    'Ubuntu' => versioncmp($::lsbdistrelease, '8.04') ? {
-      '-1' => 'debian',
-      '0'  => 'debian',
-      '1'  => 'upstart',
-    },
-    /CentOS|RedHat/ => versioncmp($::operatingsystemrelease, '7.0') ? {
-      '-1' => 'sysv',
-      '0'  => 'systemd',
-      '1'  => 'systemd'
-    },
-    'Fedora' => versioncmp($::operatingsystemrelease, '12') ? {
-      '-1' => 'sysv',
-      '0'  => 'systemd',
-      '1'  => 'systemd'
-    },
-    'Debian'             => 'debian',
-    'SLES'               => 'sles',
-    'Darwin'             => 'launchd',
-    default => undef
+  if $::operatingsystem == 'Ubuntu' {
+    if versioncmp($::operatingsystemrelease, '8.04') < 1 {
+      $init_style = 'debian'
+    } elsif versioncmp($::operatingsystemrelease, '15.04') < 0 {
+      $init_style = 'upstart'
+    } else {
+      $init_style = 'systemd'
+    }
+  } elsif $::operatingsystem =~ /Scientific|CentOS|RedHat|OracleLinux/ {
+    if versioncmp($::operatingsystemrelease, '7.0') < 0 {
+      $init_style = 'redhat'
+    } else {
+      $init_style  = 'systemd'
+    }
+  } elsif $::operatingsystem == 'Fedora' {
+    if versioncmp($::operatingsystemrelease, '12') < 0 {
+      $init_style = 'init'
+    } else {
+      $init_style = 'systemd'
+    }
+  } elsif $::operatingsystem == 'Debian' {
+    if versioncmp($::operatingsystemrelease, '8.0') < 0 {
+      $init_style = 'debian'
+    } else {
+      $init_style = 'systemd'
+    }
+  } elsif $::operatingsystem == 'Archlinux' {
+    $init_style = 'systemd'
+  } elsif $::operatingsystem == 'OpenSuSE' {
+    $init_style = 'systemd'
+  } elsif $::operatingsystem =~ /SLE[SD]/ {
+    if versioncmp($::operatingsystemrelease, '12.0') < 0 {
+      $init_style = 'sles'
+    } else {
+      $init_style = 'systemd'
+    }
+  } elsif $::operatingsystem == 'Darwin' {
+    $init_style = 'launchd'
+  } elsif $::operatingsystem == 'Amazon' {
+    $init_style = 'init'
+  } else {
+    $init_style = undef
   }
   if $init_style == undef {
-    fail("Unsupported O/S")
+    fail('Unsupported OS')
   }
 }

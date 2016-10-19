@@ -5,6 +5,8 @@
 maintenance. Please take a look at [https://github.com/jfryman/puppet-nginx/blob/master/docs/hiera.md](https://github.com/jfryman/puppet-nginx/blob/master/docs/hiera.md)
 before upgrading or installing Version 0.1.0 or greater.
 
+[![Puppet
+Forge](http://img.shields.io/puppetforge/v/jfryman/nginx.svg)](https://forge.puppetlabs.com/jfryman/nginx)
 [![Build Status](https://travis-ci.org/jfryman/puppet-nginx.png)](https://travis-ci.org/jfryman/puppet-nginx)
 
 
@@ -13,13 +15,17 @@ before upgrading or installing Version 0.1.0 or greater.
 
 This module manages NGINX configuration.
 
-## Quick Start
-
 ### Requirements
 
 * Puppet-2.7.0 or later
 * Facter 1.7.0 or later
 * Ruby-1.9.3 or later (Support for Ruby-1.8.7 is not guaranteed. YMMV).
+
+### Additional Documentation
+
+* [A Quickstart Guide to the NGINX Puppet Module][quickstart]
+[quickstart]: https://github.com/jfryman/puppet-nginx/blob/master/docs/quickstart.md
+
 
 ### Install and bootstrap an NGINX instance
 
@@ -27,7 +33,16 @@ This module manages NGINX configuration.
 class { 'nginx': }
 ```
 
-### Setup a new virtual host
+### A simple reverse proxy
+
+```puppet
+nginx::resource::vhost { 'kibana.myhost.com':
+  listen_port => 80,
+  proxy       => 'http://localhost:5601',
+}
+```
+
+### A virtual host with static content
 
 ```puppet
 nginx::resource::vhost { 'www.puppetlabs.com':
@@ -35,7 +50,7 @@ nginx::resource::vhost { 'www.puppetlabs.com':
 }
 ```
 
-### Add a Proxy Server
+### A more complex proxy example
 
 ```puppet
 nginx::resource::upstream { 'puppet_rack_app':
@@ -115,6 +130,7 @@ nginx::nginx_locations:
   'static':
     location: '~ "^/static/[0-9a-fA-F]{8}\/(.*)$"'
     vhost: www.puppetlabs.com
+    www_root: /var/www/html
   'userContent':
     location: /userContent
     vhost: www.puppetlabs.com
@@ -130,13 +146,28 @@ nginx::nginx_mailhosts:
 
 ## Nginx with precompiled Passenger
 
-Currently this works only for Debian family.
+Currently this works only for Debian family and OpenBSD.
 
+On Debian it might look like:
 ```puppet
 class { 'nginx':
   package_source  => 'passenger',
   http_cfg_append => {
     'passenger_root' => '/usr/lib/ruby/vendor_ruby/phusion_passenger/locations.ini',
+  }
+}
+```
+
+Here the example for OpenBSD:
+
+```puppet
+class { 'nginx':
+  package_flavor => 'passenger',
+  service_flags  => '-u'
+  http_cfg_append => {
+    passenger_root          => '/usr/local/lib/ruby/gems/2.1/gems/passenger-4.0.44',
+    passenger_ruby          =>  '/usr/local/bin/ruby21',
+    passenger_max_pool_size => '15',
   }
 }
 ```
@@ -219,8 +250,8 @@ define web::nginx_ssl_with_redirect (
     location_cfg_append   => $location_cfg_append,
     index_files           => [ 'index.php' ],
     ssl                   => true,
-    ssl_cert              => 'puppet:///modules/sslkey/wildcard_mydomain.crt',
-    ssl_key               => 'puppet:///modules/sslkey/wildcard_mydomain.key',
+    ssl_cert              => '/path/to/wildcard_mydomain.crt',
+    ssl_key               => '/path/to/wildcard_mydomain.key',
   }
 
 

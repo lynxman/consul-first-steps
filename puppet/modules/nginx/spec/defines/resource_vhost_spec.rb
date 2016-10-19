@@ -8,6 +8,7 @@ describe 'nginx::resource::vhost' do
     {
       :www_root    => '/',
       :ipv6_enable => true,
+      :listen_unix_socket_enable => true,
     }
   end
   let :facts do
@@ -51,9 +52,8 @@ describe 'nginx::resource::vhost' do
           :value    => false,
           :notmatch => %r|
             ^
-            \s+listen\s+\*:80;\n
             \s+server_name\s+www\.rspec\.example\.com;\n
-            \s+return\s+301\s+http://rspec\.example\.com\$uri;
+            \s+return\s+301\s+http://rspec\.example\.com\$request_uri;
           |x,
         },
         {
@@ -62,9 +62,8 @@ describe 'nginx::resource::vhost' do
           :value => true,
           :match => %r|
             ^
-            \s+listen\s+\*:80;\n
             \s+server_name\s+www\.rspec\.example\.com;\n
-            \s+return\s+301\s+http://rspec\.example\.com\$uri;
+            \s+return\s+301\s+http://rspec\.example\.com\$request_uri;
           |x,
         },
         {
@@ -114,6 +113,30 @@ describe 'nginx::resource::vhost' do
           :attr  => 'ipv6_listen_options',
           :value => 'spdy',
           :match => %r'\s+listen\s+\[::\]:80 spdy;',
+        },
+        {
+          :title => 'should enable listening on unix socket',
+          :attr  => 'listen_unix_socket_enable',
+          :value => true,
+          :match => %r'\s+listen\s+unix:/var/run/nginx\.sock;',
+        },
+        {
+          :title    => 'should not enable listening on unix socket',
+          :attr     => 'listen_unix_socket_enable',
+          :value    => false,
+          :notmatch => %r'\s+listen\s+unix:/var/run/nginx\.sock;',
+        },
+        {
+          :title => 'should set the listen unix socket',
+          :attr  => 'listen_unix_socket',
+          :value => '/var/run/puppet_nginx.sock',
+          :match => %r'\s+listen\s+unix:/var/run/puppet_nginx\.sock;',
+        },
+        {
+          :title => 'should set the listen unix socket options',
+          :attr  => 'listen_unix_socket_options',
+          :value => 'spdy',
+          :match => %r'\s+listen\s+unix:/var/run/nginx\.sock spdy;',
         },
         {
           :title => 'should set servername(s)',
@@ -255,7 +278,7 @@ describe 'nginx::resource::vhost' do
             if matches.all? { |m| m.is_a? Regexp }
               matches.each { |item| is_expected.to contain_concat__fragment("#{title}-header").with_content(item) }
             else
-              lines = subject.resource('concat::fragment', "#{title}-header").send(:parameters)[:content].split("\n")
+              lines = catalogue.resource('concat::fragment', "#{title}-header").send(:parameters)[:content].split("\n")
               expect(lines & Array(param[:match])).to eq(Array(param[:match]))
             end
             Array(param[:notmatch]).each do |item|
@@ -274,9 +297,8 @@ describe 'nginx::resource::vhost' do
           :value    => false,
           :notmatch => %r|
             ^
-            \s+listen\s+\*:443\s+ssl;\n
             \s+server_name\s+www\.rspec\.example\.com;\n
-            \s+return\s+301\s+https://rspec\.example\.com\$uri;
+            \s+return\s+301\s+https://rspec\.example\.com\$request_uri;
           |x,
         },
         {
@@ -320,7 +342,7 @@ describe 'nginx::resource::vhost' do
             if matches.all? { |m| m.is_a? Regexp }
               matches.each { |item| is_expected.to contain_concat__fragment("#{title}-footer").with_content(item) }
             else
-              lines  = subject.resource('concat::fragment', "#{title}-footer").send(:parameters)[:content].split("\n")
+              lines  = catalogue.resource('concat::fragment', "#{title}-footer").send(:parameters)[:content].split("\n")
               expect(lines & Array(param[:match])).to eq(Array(param[:match]))
             end
             Array(param[:notmatch]).each do |item|
@@ -339,9 +361,8 @@ describe 'nginx::resource::vhost' do
           :value    => false,
           :notmatch => %r|
             ^
-            \s+listen\s+\*:443\s+ssl;\n
             \s+server_name\s+www\.rspec\.example\.com;\n
-            \s+return\s+301\s+https://rspec\.example\.com\$uri;
+            \s+return\s+301\s+https://rspec\.example\.com\$request_uri;
           |x,
         },
         {
@@ -350,9 +371,8 @@ describe 'nginx::resource::vhost' do
           :value => true,
           :match => %r|
             ^
-            \s+listen\s+\*:443\s+ssl;\n
             \s+server_name\s+www\.rspec\.example\.com;\n
-            \s+return\s+301\s+https://rspec\.example\.com\$uri;
+            \s+return\s+301\s+https://rspec\.example\.com\$request_uri;
           |x,
         },
         {
@@ -376,6 +396,18 @@ describe 'nginx::resource::vhost' do
         {
           :title => 'should not set SPDY',
           :attr  => 'spdy',
+          :value => 'off',
+          :match => %r'\s+listen\s+\*:443 ssl;',
+        },
+        {
+          :title => 'should set HTTP2',
+          :attr  => 'http2',
+          :value => 'on',
+          :match => %r'\s+listen\s+\*:443 ssl http2;',
+        },
+        {
+          :title => 'should not set HTTP2',
+          :attr  => 'http2',
           :value => 'off',
           :match => %r'\s+listen\s+\*:443 ssl;',
         },
@@ -432,6 +464,42 @@ describe 'nginx::resource::vhost' do
           :attr  => 'rewrite_www_to_non_www',
           :value => false,
           :match => %r'\s+server_name\s+www.rspec.example.com;',
+        },
+        {
+          :title => 'should set the SSL buffer size',
+          :attr  => 'ssl_buffer_size',
+          :value => '4k',
+          :match => '  ssl_buffer_size           4k;',
+        },
+        {
+          :title => 'should set the SSL client certificate file',
+          :attr  => 'ssl_client_cert',
+          :value => '/tmp/client_certificate',
+          :match => %r'\s+ssl_client_certificate\s+/tmp/client_certificate;',
+        },
+        {
+          :title => 'should set the SSL CRL file',
+          :attr  => 'ssl_crl',
+          :value => '/tmp/crl',
+          :match => %r'\s+ssl_crl\s+/tmp/crl;',
+        },
+        {
+          :title => 'should set the SSL DH parameters file',
+          :attr  => 'ssl_dhparam',
+          :value => '/tmp/dhparam',
+          :match => %r'\s+ssl_dhparam\s+/tmp/dhparam;',
+        },
+        {
+          :title => 'should set the SSL stapling file',
+          :attr  => 'ssl_stapling_file',
+          :value => '/tmp/stapling_file',
+          :match => %r'\s+ssl_stapling_file\s+/tmp/stapling_file;',
+        },
+        {
+          :title => 'should set the SSL trusted certificate file',
+          :attr  => 'ssl_trusted_cert',
+          :value => '/tmp/trusted_certificate',
+          :match => %r'\s+ssl_trusted_certificate\s+/tmp/trusted_certificate;',
         },
         {
           :title => 'should set the SSL cache',
@@ -576,7 +644,7 @@ describe 'nginx::resource::vhost' do
             if matches.all? { |m| m.is_a? Regexp }
               matches.each { |item| is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content(item) }
             else
-              lines = subject.resource('concat::fragment', "#{title}-ssl-header").send(:parameters)[:content].split("\n")
+              lines = catalogue.resource('concat::fragment', "#{title}-ssl-header").send(:parameters)[:content].split("\n")
               expect(lines & Array(param[:match])).to eq(Array(param[:match]))
             end
             Array(param[:notmatch]).each do |item|
@@ -595,9 +663,8 @@ describe 'nginx::resource::vhost' do
           :value    => false,
           :notmatch => %r|
             ^
-            \s+listen\s+\*:443\s+ssl;\n
             \s+server_name\s+www\.rspec\.example\.com;\n
-            \s+return\s+301\s+https://rspec\.example\.com\$uri;
+            \s+return\s+301\s+https://rspec\.example\.com\$request_uri;
           |x,
         },
         {
@@ -656,7 +723,7 @@ describe 'nginx::resource::vhost' do
             if matches.all? { |m| m.is_a? Regexp }
               matches.each { |item| is_expected.to contain_concat__fragment("#{title}-ssl-footer").with_content(item) }
             else
-              lines = subject.resource('concat::fragment', "#{title}-ssl-footer").send(:parameters)[:content].split("\n")
+              lines = catalogue.resource('concat::fragment', "#{title}-ssl-footer").send(:parameters)[:content].split("\n")
               expect(lines & Array(param[:match])).to eq(Array(param[:match]))
             end
             Array(param[:notmatch]).each do |item|
@@ -681,8 +748,8 @@ describe 'nginx::resource::vhost' do
           }
         end
 
-        it "should set the server_name of the rewrite server stanza to the first server_name with 'www.' stripped" do
-          is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content(/^\s+server_name\s+foo.com;/)
+        it "should set the server_name of the rewrite server stanza to every server_name with 'www.' stripped" do
+          is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content(/^\s+server_name\s+foo.com\s+bar.foo.com\s+foo.com;/)
         end
       end
 
@@ -696,8 +763,8 @@ describe 'nginx::resource::vhost' do
           }
         end
 
-        it "should set the server_name of the rewrite server stanza to the first server_name with 'www.' stripped" do
-          is_expected.to contain_concat__fragment("#{title}-header").with_content(/^\s+server_name\s+foo.com;/)
+        it "should set the server_name of the rewrite server stanza to every server_name with 'www.' stripped" do
+          is_expected.to contain_concat__fragment("#{title}-header").with_content(/^\s+server_name\s+foo.com\s+bar.foo.com\s+foo.com;/)
         end
       end
 
@@ -769,6 +836,15 @@ describe 'nginx::resource::vhost' do
         it { is_expected.to contain_file('/etc/nginx/fastcgi_params').with_mode('0770') }
       end
 
+      context 'when uwsgi => "uwsgi_upstream"' do
+        let :params do default_params.merge({
+          :uwsgi => 'uwsgi_upstream',
+        }) end
+
+        it { should contain_file('/etc/nginx/uwsgi_params').with_mode('0770') }
+      end
+
+
       context 'when listen_port == ssl_port' do
         let :params do default_params.merge({
           :listen_port => 80,
@@ -813,11 +889,26 @@ describe 'nginx::resource::vhost' do
         it { is_expected.to contain_nginx__resource__location("#{title}-default").with_ssl_only(true) }
         it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content(%r{access_log\s+/var/log/nginx/ssl-www\.rspec\.example\.com\.access\.log combined;}) }
         it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content(%r{error_log\s+/var/log/nginx/ssl-www\.rspec\.example\.com\.error\.log}) }
+        it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content(%r{ssl_certificate\s+dummy.cert;}) }
+        it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content(%r{ssl_certificate_key\s+dummy.key;}) }
         it { is_expected.to contain_concat__fragment("#{title}-ssl-footer") }
-        it { is_expected.to contain_file("/etc/nginx/#{title}.crt") }
-        it { is_expected.to contain_file("/etc/nginx/#{title}.key") }
       end
 
+      context 'when ssl_client_cert is set' do
+        let :params do default_params.merge({
+          :ssl                => true,
+          :listen_port        => 80,
+          :ssl_port           => 80,
+          :ssl_key            => 'dummy.key',
+          :ssl_cert           => 'dummy.cert',
+          :ssl_client_cert    => 'client.cert',
+        }) end
+
+        it { is_expected.to contain_nginx__resource__location("#{title}-default").with_ssl_only(true) }
+        it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content(%r{access_log\s+/var/log/nginx/ssl-www\.rspec\.example\.com\.access\.log combined;}) }
+        it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content(%r{error_log\s+/var/log/nginx/ssl-www\.rspec\.example\.com\.error\.log}) }
+        it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content(%r{ssl_verify_client on;}) }
+      end
       context 'when passenger_cgi_param is set' do
         let :params do default_params.merge({
           :passenger_cgi_param => { 'test1' => 'test value 1', 'test2' => 'test value 2', 'test3' => 'test value 3' }
@@ -841,11 +932,90 @@ describe 'nginx::resource::vhost' do
         it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content( /passenger_set_cgi_param  test3 test value 3;/ ) }
       end
 
+      context 'when passenger_set_header is set' do
+        let :params do default_params.merge({
+          :passenger_set_header => { 'test1' => 'test value 1', 'test2' => 'test value 2', 'test3' => 'test value 3' }
+        }) end
+
+        it { is_expected.to contain_concat__fragment("#{title}-header").with_content( /passenger_set_header  test1 test value 1;/ ) }
+        it { is_expected.to contain_concat__fragment("#{title}-header").with_content( /passenger_set_header  test2 test value 2;/ ) }
+        it { is_expected.to contain_concat__fragment("#{title}-header").with_content( /passenger_set_header  test3 test value 3;/ ) }
+      end
+
+      context 'when passenger_set_header is set and ssl => true' do
+        let :params do default_params.merge({
+          :passenger_set_header => { 'test1' => 'test value 1', 'test2' => 'test value 2', 'test3' => 'test value 3' },
+          :ssl                  => true,
+          :ssl_key              => 'dummy.key',
+          :ssl_cert             => 'dummy.cert',
+        }) end
+
+        it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content( /passenger_set_header  test1 test value 1;/ ) }
+        it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content( /passenger_set_header  test2 test value 2;/ ) }
+        it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content( /passenger_set_header  test3 test value 3;/ ) }
+      end
+
+      context 'when passenger_env_var is set' do
+        let :params do default_params.merge({
+          :passenger_env_var => { 'test1' => 'test value 1', 'test2' => 'test value 2', 'test3' => 'test value 3' }
+        }) end
+
+        it { is_expected.to contain_concat__fragment("#{title}-header").with_content( /passenger_env_var  test1 test value 1;/ ) }
+        it { is_expected.to contain_concat__fragment("#{title}-header").with_content( /passenger_env_var  test2 test value 2;/ ) }
+        it { is_expected.to contain_concat__fragment("#{title}-header").with_content( /passenger_env_var  test3 test value 3;/ ) }
+      end
+
+      context 'when passenger_env_var is set and ssl => true' do
+        let :params do default_params.merge({
+          :passenger_env_var   => { 'test1' => 'test value 1', 'test2' => 'test value 2', 'test3' => 'test value 3' },
+          :ssl                 => true,
+          :ssl_key             => 'dummy.key',
+          :ssl_cert            => 'dummy.cert',
+        }) end
+
+        it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content( /passenger_env_var  test1 test value 1;/ ) }
+        it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content( /passenger_env_var  test2 test value 2;/ ) }
+        it { is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content( /passenger_env_var  test3 test value 3;/ ) }
+      end
+
       context 'when vhost name is sanitized' do
         let :title do 'www rspec-vhost com' end
         let :params do default_params end
 
         it { is_expected.to contain_concat('/etc/nginx/sites-available/www_rspec-vhost_com.conf') }
+      end
+
+      context 'when add_header is set' do
+        let :params do default_params.merge({
+          :add_header => { 'header3' => 'test value 3', 'header2' => 'test value 2', 'header1' => 'test value 1' }
+        }) end
+
+        it 'should have correctly ordered entries in the config' do
+          is_expected.to contain_concat__fragment("#{title}-header").with_content(/
+            %r|
+            \s+add_header\s+header1 test value 1;\n
+            \s+add_header\s+header2 test value 2;\n
+            \s+add_header\s+header3 test value 3;\n
+            |/)
+        end
+      end
+
+      context 'when add_header is set and ssl => true' do
+        let :params do default_params.merge({
+          :add_header => { 'header3' => 'test value 3', 'header2' => 'test value 2', 'header1' => 'test value 1' },
+          :ssl        => true,
+          :ssl_key    => 'dummy.key',
+          :ssl_cert   => 'dummy.cert',
+        }) end
+
+        it 'should have correctly ordered entries in the config' do
+          is_expected.to contain_concat__fragment("#{title}-ssl-header").with_content(/
+            %r|
+            \s+add_header\s+header1 test value 1;\n
+            \s+add_header\s+header2 test value 2;\n
+            \s+add_header\s+header3 test value 3;\n
+            |/)
+        end
       end
     end
   end
